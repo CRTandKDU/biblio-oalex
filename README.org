@@ -4,6 +4,44 @@
 
 ~biblio-oalex.el~ adds [[https://openalex.org/][Open Alex]] as another source to search and analyze the world's research.
 
+~biblio-citeproc.el` adds a biblio extended action that inserts a plain text reference at point (properly formatted according to selected CSL file), rather than the biblatex entry.
+
 ** Installation
 ** Usage
+Same as the ~biblio-lookup~ command. Open Alex appears as a choice of bibliographic source.
 
+** Customization
+*** Using ~helm-bibtex~
+It is possible to customize [[https://github.com/tmalsburg/helm-bibtex][helm-bibtex]] to add Open Alex, through ~biblio-oalex~, to the /Fallback Options/ panel by simply customizing the variable ~bibtex-completion-fallback-options~.
+
+Adding this to the list of fallback sources:
+
+#+begin_source emacs-lisp
+("Open Alex (works entities)" lambda
+      (search-expression)
+      (biblio-lookup #'biblio-oalex-backend search-expression))
+#+end_source
+
+will request Open Alex from the /Fallback Options/ panel.
+
+*** Default directories and CSL files
+Two custom variables are used in ~biblio-citeproc~ to locate directories and files:
+
+  - ~biblio-citeproc-locale-dir~ a string, the directory where the locales are found (namely the ~locales-en-US.xml~ file).
+  - ~biblio-citeproc-csl-styles~ an alist, where keys are keywords for styles (as displayed in the choice box) and values are the full paths to CSL files, both as strings.
+
+As an example configuration (here on Windows):
+#+begin_source emacs-lisp
+(custom-set-variables
+ ;; custom-set-variables was added by Custom.
+ ;; If you edit it by hand, you could mess it up, so be careful.
+ ;; Your init file should contain only one such instance.
+ ;; If there is more than one, they won't work right.
+ '(biblio-citeproc-csl-styles
+   '(("ieee (Institute of Electrical and Electronics Engineers)" . "C:\\Users\\public\\Documents\\ieee.csl")
+     ("acl (Association for Computational Linguistics)" . "C:\\Users\\public\\Documents\\acl.csl")
+     ("apa (American Psychological Association)" . "C:\\Users\\public\\Documents\\apa.csl")))
+ '(biblio-citeproc-locale-dir "C:\\\\Users\\\\public\\\\Documents")
+. . .
+)
+#+end_source
