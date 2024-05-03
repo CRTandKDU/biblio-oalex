@@ -16,11 +16,11 @@ It is possible to customize [[https://github.com/tmalsburg/helm-bibtex][helm-bib
 
 Adding this to the list of fallback sources:
 
-#+begin_source emacs-lisp
+#+BEGIN_EXAMPLE
 ("Open Alex (works entities)" lambda
       (search-expression)
       (biblio-lookup #'biblio-oalex-backend search-expression))
-#+end_source
+#+END_EXAMPLE
 
 will request Open Alex from the /Fallback Options/ panel.
 
@@ -31,7 +31,7 @@ Two custom variables are used in ~biblio-citeproc~ to locate directories and fil
   - ~biblio-citeproc-csl-styles~ an alist, where keys are keywords for styles (as displayed in the choice box) and values are the full paths to CSL files, both as strings.
 
 As an example configuration (here on Windows):
-#+begin_source emacs-lisp
+#+BEGIN_EXAMPLE
 (custom-set-variables
  ;; custom-set-variables was added by Custom.
  ;; If you edit it by hand, you could mess it up, so be careful.
@@ -44,4 +44,4 @@ As an example configuration (here on Windows):
  '(biblio-citeproc-locale-dir "C:\\\\Users\\\\public\\\\Documents")
 . . .
 )
-#+end_source
+#+END_EXAMPLE
