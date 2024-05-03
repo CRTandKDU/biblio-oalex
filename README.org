@@ -4,7 +4,7 @@
 
 ~biblio-oalex.el~ adds [[https://openalex.org/][Open Alex]] as another source to search and analyze the world's research.
 
-~biblio-citeproc.el` adds a biblio extended action that inserts a plain text reference at point (properly formatted according to selected CSL file), rather than the biblatex entry.
+~biblio-citeproc.el~ adds a biblio extended action that inserts a plain text reference at point (properly formatted according to selected CSL file), rather than the biblatex entry.
 
 ** Installation
 ** Usage
