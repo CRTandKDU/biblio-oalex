@@ -201,5 +201,5 @@ to citeproc reference.
              '("Insert Reference in plain text, according to selected CSL" .
                biblio-citeproc--insert-reference-text))
 
-
+(provide 'biblio-citeproc)
 ;;; biblio-citeproc.el ends here
