@@ -23,17 +23,29 @@
 ;;  Again, the invaluable John Kitchin [[https://wikemacs.org/wiki/How_to_write_helm_extensions]]
 
 ;;; Code:
-(require 'openalex)
+(require 'helm-openalex)
 
 ;; Crude unplugging of 'ivy".
 (defun ivy-more-chars () nil)
 
 (defun oalex-helm--authors-source (query)
   (list
-   (list '(name . "Open Alex")
+   (list '(name . "Open Alex: Authors")
 	 (cons 'candidates (lambda () (oa--author-candidates query)))
-	 '(action . (lambda (candidate)
-		      (message "%s" (get-text-property 0 'oaid (helm-get-selection nil 'withprop))))))
+	 '(action . (("Message" . (lambda (candidate)
+				    (message
+				     "%s"
+				     (get-text-property 0 'oaid (helm-get-selection nil 'withprop)))
+				    nil))
+		     ("Org-mode" . (lambda (candidate)
+				     (oa--author-org
+				      (get-text-property 0 'oaid (helm-get-selection nil 'withprop))
+				      500)))
+		     ("Browse" . (lambda (candidate)
+				   (browse-url (get-text-property 0 'oaid (helm-get-selection nil 'withprop)))))
+		     )
+		  )
+	 )
    )
   )
 
