@@ -14,7 +14,7 @@
 ;;; Change Log:
 ;;; Code:
 (require 'cl)
-(require helm-openalex)
+(require 'helm-openalex)
 
 (defvar cosma-zero-id 240000 "Start beyond 23:59:59 for id generation")
 
@@ -54,7 +54,7 @@ tags:
   "Template for root author node and yaml headers of individual .md files.")
 
 
-(defcustom cosma-dir "C:\\Users\\chauv\\Documents\\BIBLIO-OALEX\\out"
+(defcustom cosma-dir ""
   "Directory for cosma Markdown files"
   :type '(directory)
   )

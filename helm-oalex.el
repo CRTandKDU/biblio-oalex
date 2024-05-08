@@ -1,4 +1,4 @@
-;;; helm-oalex.el --- Lookup and import bibliographic entries from Open Alex -*- lexical-binding: t -*-
+;;; helm-oalex.el --- Lookup and import bibliographic entries from Open Alex  
 
 ;; Copyright (c) 2024  Jean-Marie Chauvet
 
