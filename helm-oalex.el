@@ -24,9 +24,16 @@
 
 ;;; Code:
 (require 'helm-openalex)
+(require 'cosma)
 
 ;; Crude unplugging of 'ivy".
 (defun ivy-more-chars () nil)
+
+(defun helm-oalex--cosmo (oaid)
+  ;; WARNING: Clean directory
+  (shell-command (format "del %s\\*.md" cosma-dir))
+  (cosma-export--oalex oaid)
+  )
 
 (defun oalex-helm--authors-source (query)
   (list
@@ -41,6 +48,9 @@
 				     (oa--author-org
 				      (get-text-property 0 'oaid (helm-get-selection nil 'withprop))
 				      500)))
+		     ("Cosmoscope" . (lambda (candidate)
+				       (helm-oalex--cosmo
+					(get-text-property 0 'oaid (helm-get-selection nil 'withprop)))))
 		     ("Browse" . (lambda (candidate)
 				   (browse-url (get-text-property 0 'oaid (helm-get-selection nil 'withprop)))))
 		     )
