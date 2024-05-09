@@ -69,8 +69,102 @@ global counter."
 	)
     (format "%04d%02d%02d%6s" (nth 5 now) (nth 4 now) (nth 3 now) end)))
 
+(defun cosma--shortid (oaid)
+  (car (last (string-split oaid "/"))))
+
+;;; Ancillaries adapted from openalex.el in ORG-REF
+(defun cosma--primary-topic (wrk)
+  (let ((ptopic (oa-get wrk "primary_topic"))
+	)
+    (s-format "[${name}](${id}) in [${D}](${DID})/[${F}](${FID})/[${SUBF}](${SUBFID})"
+	      (lambda (key data)
+		(or (cdr (assoc key data)) ""))
+	      `(("name" .	,(oa-get ptopic "display_name"))
+		("id" .         ,(oa-get ptopic "id"))
+		("D" .		,(oa-get ptopic "domain.display_name"))
+		("DID" .	,(oa-get ptopic "domain.id"))
+		("F" .		,(oa-get ptopic "field.display_name"))
+		("FID" .	,(oa-get ptopic "field.id"))
+		("SUBF" .	,(oa-get ptopic "subfield.display_name"))
+		("SUBFID" .	,(oa-get ptopic "subfield.id"))
+		)
+	      )
+    )
+  )
+
+(defun cosma--oa-authorships (wrk)
+  "Return an author string for WRK.
+The string is a comma-separated list of links to author pages in OpenAlex."
+  (s-join ", " (cl-loop for author in (plist-get wrk :authorships)
+			collect
+			(format "[%s](%s)"
+				(plist-get
+				 (plist-get author :author)
+				 :display_name)
+				(plist-get
+				 (plist-get author :author)
+				 :id)))))
+
+(defun cosma--oa-work (work)
+  (let* ((work-data (request-response-data
+		     (request (format work-api-url (cosma--shortid (cddr work)))
+		       :sync t
+		       :parser 'oa--response-parser
+		       :params `(("mailto" . ,user-mail-address)
+				 ("api_key" . ,oa-api-key)
+				 ))))
+	 )
+    (insert (s-format "
+<script src=\"https://cdn.plot.ly/plotly-2.32.0.min.js\" charset=\"utf-8\"></script>
+
+[Web View](${landing_page_url}) | [Open Alex View](${oa-id})
+
+## Authors
+${authorships}
+
+## Concepts
+<div id=\"chart_concepts_${abbr-id}\" style=\"width:100%;max-width:700px\"></div>
+<script>
+ const data_${abbr-id} = [
+     {
+	 y: ['giraffes', 'orangutans', 'monkeys'],
+	 x: [20, 14, 23],
+	 type: 'bar',
+	 orientation: 'h'
+     }
+ ];
+ const layout_${abbr-id} = {
+    title: 'Create a Static Chart',
+    showlegend: false
+ };
+ TESTER = document.getElementById( 'chart_concepts_${abbr-id}' );
+ Plotly.newPlot( TESTER, data_${abbr-id}, layout_${abbr-id}, {staticPlot: true} )
+</script>
+
+
+## Topics
+${primary_topic}
+"
+		      (lambda (key data)
+			(or (cdr (assoc key data)) ""))
+		      `(("title" .		,(oa--title work-data))
+			("oa-id" .		,(oa-get work-data "id"))
+			("abbr-id" .            ,(cosma--shortid (oa-get work-data "id")))
+			("publication_year" .	,(oa-get work-data "publication_year"))
+			("landing_page_url" .	,(oa-get work-data "primary_location.landing_page_url"))
+			("authorships" .	,(cosma--oa-authorships work-data))
+			("primary_topic" .	,(cosma--primary-topic work-data))
+			)
+		      )
+	    )
+    )
+  )
+
+
 (defun cosma--oa-author-entries (works-data url &optional slice)
-  "Get entries from WORKS-DATA."
+  "Get entries from WORKS-DATA.
+Return an association list with key WORK-TITLE and value (COSMA-UUID . WORK-OAID).
+"
   (let* ((meta (plist-get works-data :meta)) 
 	 (per-page (plist-get meta :per_page))
 	 (count (if slice slice (plist-get meta :count)))
@@ -95,9 +189,9 @@ global counter."
 				   (cl-loop for result in (plist-get works-data :results)
 					    collect
 					    (let ((wid (cosma--newid)))
-					      ;;CONS of text entry and pair TITLE . UUID
+					      ;; Returns an alist with fields of interest
 					      (cons (s-format
-						     "${title} [[works:${wid}]], ${publication_year}"
+						     "[[works:${wid}|${title}]], ${publication_year}"
 						     (lambda (key data)
 						       (or (cdr (assoc key data)) ""))
 						     `(("title" . ,(oa--title result))
@@ -146,8 +240,7 @@ Alex, and return the TOC as an alist (WORK-TITLE . COSMA-UUID)."
 				       (format "* %s" (car item)))
 			      entries-alist)))
 	(append-to-file (point-min) (point-max)
-			(format "%s\\%s_%s.md" cosma-dir fn
-				(car (last (string-split oaid "/")))))
+			(format "%s\\%s_%s.md" cosma-dir fn (cosma--shortid oaid)))
 	(mapcar #'cdr entries-alist))
       )))
 
@@ -231,6 +324,7 @@ with annotated lists of pointers (when present in org buffer).
 
 (defun cosma-export--oalex (oaid)
   (let* ((dir cosma-dir)
+	 (work-api-url "https://api.openalex.org/works/%s")
 	 (toc (cosma--oa-author-toc oaid))
 	 )
     (dolist (work toc)
@@ -246,6 +340,9 @@ with annotated lists of pointers (when present in org buffer).
 			  fn
 			  (cddr work)
 			  ""))
+	  ;; Content
+	  (cosma--oa-work work)
+	  ;; Save individual WORK Markdown file
 	  (append-to-file (point-min) (point-max)
 			  (format "%s\\%s_%s.md" dir fn (cadr work)))
 	  )
