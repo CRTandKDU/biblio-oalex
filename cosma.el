@@ -73,6 +73,54 @@ global counter."
   (car (last (string-split oaid "/"))))
 
 ;;; Ancillaries adapted from openalex.el in ORG-REF
+;;; (could certainly be optimized).
+(defun cosma--concepts-js (wrk)
+  "Returns list of concepts as a javascript array of strings."
+  (s-join ", " (cl-loop for concept in (plist-get wrk :concepts)
+			collect
+			(format "\"%s\"" (plist-get concept :display_name))
+			))
+  )	
+
+(defun cosma--concepts-score-js (wrk)
+  "Returns list of concepts as a javascript array of strings."
+  (s-join ", " (cl-loop for concept in (plist-get wrk :concepts)
+			collect
+			(number-to-string (plist-get concept :score))
+			))
+  )	
+
+(defun cosma--citations-js (wrk)
+  "Returns list of citations as a javascript array of strings."
+  (s-join ", " (cl-loop for citation in (plist-get wrk :counts_by_year)
+			collect
+			(format "\"Y: %4d\"" (plist-get citation :year))
+			))
+  )	
+
+(defun cosma--citations-score-js (wrk)
+  "Returns list of citations as a javascript array of strings."
+  (s-join ", " (cl-loop for citation in (plist-get wrk :counts_by_year)
+			collect
+			(number-to-string (float (plist-get citation :cited_by_count)))
+			))
+  )	
+
+(defun cosma--countbyyear-js (wrk)
+  "Returns list of countbyyear as a javascript array of strings."
+  (s-join ", " (cl-loop for x in (plist-get wrk :counts_by_year)
+			collect
+			(format "\"Y: %4d\"" (plist-get x :year))
+			))
+  )	
+
+(defun cosma--countbyyear-score-js (wrk)
+  "Returns list of countbyyear as a javascript array of strings."
+  (s-join ", " (cl-loop for x in (plist-get wrk :counts_by_year)
+			collect
+			(number-to-string (float (plist-get x :works_count)))
+			))
+  )	
 (defun cosma--primary-topic (wrk)
   (let ((ptopic (oa-get wrk "primary_topic"))
 	)
@@ -106,6 +154,10 @@ The string is a comma-separated list of links to author pages in OpenAlex."
 				 :id)))))
 
 (defun cosma--oa-work (work)
+  "The WORK Markdown file.
+
+Broken up in sections, each set up with (s-format TEMPLATE REPLACER EXTRA-ALIST).
+"
   (let* ((work-data (request-response-data
 		     (request (format work-api-url (cosma--shortid (cddr work)))
 		       :sync t
@@ -113,6 +165,22 @@ The string is a comma-separated list of links to author pages in OpenAlex."
 		       :params `(("mailto" . ,user-mail-address)
 				 ("api_key" . ,oa-api-key)
 				 ))))
+	 (extras `(("title" .			,(oa--title work-data))
+		   ("oa-id" .			,(oa-get work-data "id"))
+		   ("abbr-id" .			,(cosma--shortid (oa-get work-data "id")))
+		   ("publication_year" .	,(oa-get work-data "publication_year"))
+		   ("landing_page_url" .	,(oa-get work-data "primary_location.landing_page_url"))
+		   ("authorships" .		,(cosma--oa-authorships work-data))
+		   ("primary_topic" .		,(cosma--primary-topic work-data))
+		   ("concepts_js" .		,(cosma--concepts-js work-data))
+		   ("concepts_score_js" .	,(cosma--concepts-score-js work-data))
+		   ("concepts_height" .		,(* 6 (length (cosma--concepts-score-js work-data))))
+		   ("cited_by_count" .		,(oa-get work-data "cited_by_count"))
+		   ("citations_js" .		,(cosma--citations-js work-data))
+		   ("citations_score_js" .	,(cosma--citations-score-js work-data))
+		   ("citations_height" .	,(* 6 (length (cosma--citations-js work-data))))
+		   
+		   ))
 	 )
     (insert (s-format "
 <script src=\"https://cdn.plot.ly/plotly-2.32.0.min.js\" charset=\"utf-8\"></script>
@@ -122,40 +190,38 @@ The string is a comma-separated list of links to author pages in OpenAlex."
 ## Authors
 ${authorships}
 
+"
+		      (lambda (key data)
+			(or (cdr (assoc key data)) ""))
+		      extras)
+	    (s-format (if (> (oa-get work-data "cited_by_count") 0)
+			  "
+## Citations (${cited_by_count})
+<div id=\"chart_citations_${abbr-id}\" style=\"width:445px;height: 250px;\"></div>
+<script> const citationsdata_${abbr-id} = [{ y: [${citations_js}],x: [${citations_score_js}],type: 'bar',orientation: 'h',marker:{ color: 'rgba(227, 179, 130, 0.75)',line: { color: 'rgb(227, 179, 130)',width: 1 } } }]; const citationslayout_${abbr-id} = { showlegend: false,yaxis: { ticklabelposition: 'inside'} }; citationsTESTER = document.getElementById( 'chart_citations_${abbr-id}' ); Plotly.newPlot( citationsTESTER, citationsdata_${abbr-id}, citationslayout_${abbr-id} ); </script>
+" 		      "## Citations (0)
+
+"
+)
+		      (lambda (key data)
+			(or (cdr (assoc key data)) ""))
+		      extras)
+	    (s-format "
 ## Concepts
-<div id=\"chart_concepts_${abbr-id}\" style=\"width:100%;max-width:700px\"></div>
-<script>
- const data_${abbr-id} = [
-     {
-	 y: ['giraffes', 'orangutans', 'monkeys'],
-	 x: [20, 14, 23],
-	 type: 'bar',
-	 orientation: 'h'
-     }
- ];
- const layout_${abbr-id} = {
-    title: 'Create a Static Chart',
-    showlegend: false
- };
- TESTER = document.getElementById( 'chart_concepts_${abbr-id}' );
- Plotly.newPlot( TESTER, data_${abbr-id}, layout_${abbr-id}, {staticPlot: true} )
-</script>
+<div id=\"chart_concepts_${abbr-id}\" style=\"width:445px;min-height: 250px;height:${concepts_height}px\"></div> <script> const data_${abbr-id} = [{ y: [${concepts_js}],x: [${concepts_score_js}],type: 'bar',orientation: 'h',marker:{ color: 'rgba(169, 239, 46, 0.75)',line: { color: 'rgb(169, 239, 46)',width: 1 } } }]; const layout_${abbr-id} = { showlegend: false,xaxis: { range: [0.0, 1.0] },yaxis: { ticklabelposition: 'inside'} }; TESTER = document.getElementById( 'chart_concepts_${abbr-id}' ); Plotly.newPlot( TESTER, data_${abbr-id}, layout_${abbr-id} ); </script>
 
 
+"
+		      (lambda (key data)
+			(or (cdr (assoc key data)) ""))
+		      extras)
+	    (s-format "
 ## Topics
 ${primary_topic}
 "
 		      (lambda (key data)
 			(or (cdr (assoc key data)) ""))
-		      `(("title" .		,(oa--title work-data))
-			("oa-id" .		,(oa-get work-data "id"))
-			("abbr-id" .            ,(cosma--shortid (oa-get work-data "id")))
-			("publication_year" .	,(oa-get work-data "publication_year"))
-			("landing_page_url" .	,(oa-get work-data "primary_location.landing_page_url"))
-			("authorships" .	,(cosma--oa-authorships work-data))
-			("primary_topic" .	,(cosma--primary-topic work-data))
-			)
-		      )
+		      extras)
 	    )
     )
   )
@@ -206,24 +272,26 @@ Return an association list with key WORK-TITLE and value (COSMA-UUID . WORK-OAID
   
 
 (defun cosma--oa-author-toc (oaid &optional slice)
-  "Create and fill a buffer for a cosma table of content from Open
+  "Create and fill a Markdown buffer for a cosma table of content from Open
 Alex, and return the TOC as an alist (WORK-TITLE . COSMA-UUID)."
   ;; Build TOC as an alist
-  (let* ((toc nil)
-	 (fn "AUTHOR")
-	 (data (oa--author oaid))
-	 (citations-image (oa--counts-by-year data))
-	 (cited-by-count (plist-get data :cited_by_count))
-	 (works-count (plist-get data :works_count))
-	 (works-url (plist-get data :works_api_url))
-	 (works-data (request-response-data
-		      (request works-url
-			:sync t
-			:parser 'oa--response-parser
-			:params `(("mailto" . ,user-mail-address)
-				  ("api_key" . ,oa-api-key))))))
     ;; Init TOC buffer
-    (with-current-buffer (get-buffer-create "*COSMA-TOC*")
+  (with-current-buffer (get-buffer-create "*COSMA-TOC*")
+    (let* ((toc nil)
+	   (fn "AUTHOR")
+	   (data (oa--author oaid))
+	   (citations-image (oa--counts-by-year data))
+	   (cited-by-count (plist-get data :cited_by_count))
+	   (works-count (plist-get data :works_count))
+	   (works-url (plist-get data :works_api_url))
+	   (works-data (request-response-data
+			(request works-url
+			  :sync t
+			  :parser 'oa--response-parser
+			  :params `(("mailto" . ,user-mail-address)
+				    ("api_key" . ,oa-api-key)))))
+	   (entries-alist (cosma--oa-author-entries works-data works-url slice))
+	   )
       (erase-buffer)
       (set-buffer-file-coding-system 'utf-8)
       ;; Header
@@ -234,15 +302,40 @@ Alex, and return the TOC as an alist (WORK-TITLE . COSMA-UUID)."
 		      oaid
 		      ""))
       ;; Headlines
-      (insert "# Works\n")
-      (let ((entries-alist (cosma--oa-author-entries works-data works-url slice)))
-	(insert (s-join "\n" (mapcar (lambda (item)
-				       (format "* %s" (car item)))
-			      entries-alist)))
-	(append-to-file (point-min) (point-max)
-			(format "%s\\%s_%s.md" cosma-dir fn (cosma--shortid oaid)))
-	(mapcar #'cdr entries-alist))
-      )))
+      (insert
+       "<script src=\"https://cdn.plot.ly/plotly-2.32.0.min.js\" charset=\"utf-8\"></script>\n\n\n"
+       "# Works\n\n\n")
+      (insert (s-join "\n" (mapcar (lambda (item)
+				     (format "* %s" (car item)))
+				   entries-alist)))
+      ;; Counts
+      (insert "\n\n# Counts by year\n"
+	      (let* ((extras 
+		      `(("title" .			,(oa--title data))
+			("oa-id" .			,(oa-get data "id"))
+			("abbr-id" .			,(cosma--shortid (oa-get data "id")))
+			;; ("concepts_js" .		,(cosma--concepts-js data))
+			;; ("concepts_score_js" .	,(cosma--concepts-score-js data))
+			;; ("concepts_height" .		,(* 6 (length (cosma--concepts-score-js data))))
+			("countbyyear_js" .		,(cosma--countbyyear-js data))
+			("countbyyear_score_js" .	,(cosma--countbyyear-score-js data))
+			("countbyyear_height" .		,(* 6 (length (cosma--countbyyear-js data))))
+			)))
+		(s-format
+		 "<div id=\"chart_countbyyear_${abbr-id}\" style=\"width:445px;height: ${countbyyear_height}px;\"></div>
+<script> const countbyyeardata_${abbr-id} = [{ y: [${countbyyear_js}],x: [${countbyyear_score_js}],type: 'bar',orientation: 'h',marker:{ color: 'rgba(107, 190, 241, 0.75)',line: { color: 'rgb(107, 190, 241)',width: 1 } } }]; const countbyyearlayout_${abbr-id} = { showlegend: false,yaxis: { ticklabelposition: 'inside'} }; countbyyearTESTER = document.getElementById( 'chart_countbyyear_${abbr-id}' ); Plotly.newPlot( countbyyearTESTER, countbyyeardata_${abbr-id}, countbyyearlayout_${abbr-id} ); </script>
+\n"
+		 (lambda (key data)
+		   (or (cdr (assoc key data)) ""))
+		 extras))
+	      )
+      (append-to-file (point-min) (point-max)
+		      (format "%s\\%s_%s.md" cosma-dir fn (cosma--shortid oaid)))
+      (mapcar #'cdr entries-alist)
+      )
+    )
+  )
+
 
 
 (defun cosma--toc (toc-title &optional save-as-file)
