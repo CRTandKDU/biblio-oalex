@@ -25,6 +25,9 @@ link_types:
   works:
     stroke: simple
     color: "#0000cd"
+  cited_by:
+    stroke: simple
+    color: "#e3b382"
 record_filters: []
 graph_background_color: "#ffffff"
 graph_highlight_color: "#ff6a6a"

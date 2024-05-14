@@ -18,8 +18,10 @@
 
 (defvar cosma-zero-id 240000 "Start beyond 23:59:59 for id generation")
 
+(defvar cosma-oalex-citations nil "Accumulates cited-by ids in preprocessing")
+
 (defconst cosma-yaml-template "---
-title: %s
+title: \"%s\"
 id: %s
 type: %s
 tags:
@@ -30,7 +32,7 @@ tags:
   "Template for root node and yaml headers of individual .md files.")
 
 (defconst cosma-yaml-template--author "---
-title: %s
+title: \"%s\"
 id: %s
 type: %s
 oaid: %s
@@ -41,8 +43,9 @@ tags:
 "
   "Template for root work node and yaml headers of individual .md files.")
 
+
 (defconst cosma-yaml-template--work "---
-title: %s
+title: \"%s\"
 id: %s
 type: %s
 oaid: %s
@@ -58,6 +61,7 @@ tags:
   "Directory for cosma Markdown files"
   :type '(directory)
   )
+
 
 (defun cosma--newid ()
   "Generates a new unique id from the current day and incremented
@@ -153,10 +157,52 @@ The string is a comma-separated list of links to author pages in OpenAlex."
 				 (plist-get author :author)
 				 :id)))))
 
+(defun cosma--update-citations (url)
+  "Accumulate distinct (OAID COSMA-ID . TITLE) in `cosma-oalex-citations'."
+  (let* ((citations-data (request-response-data
+			  (request url
+			    :sync t
+			    :parser 'oa--response-parser
+			    :params `(("mailto" . ,user-mail-address)
+				      ("api_key" . ,oa-api-key)
+				      ))))
+	 )
+    (dolist (work (oa-get citations-data "results") cosma-oalex-citations)
+      (unless (assoc (oa-get work "id") cosma-oalex-citations)
+	(setq cosma-oalex-citations
+	      (cons  (cons (oa-get work "id") (cons (cosma--newid) (oa-get work "display_name")))
+		     cosma-oalex-citations))
+	))
+    ))
+
+(defun cosma--citations-text (url cited-by)
+  (let* ((citations-data (request-response-data
+			  (request url
+			    :sync t
+			    :parser 'oa--response-parser
+			    :params `(("mailto" . ,user-mail-address)
+				      ("api_key" . ,oa-api-key)
+				      ))))
+	 (txt "")
+	 )
+    (dolist (work (oa-get citations-data "results") txt)
+      (setq txt (concat txt
+			(format "- [[cited_by:%s|%s]]\n"
+				(cadr (assoc (oa-get work "id") cited-by))
+				(oa-get work "display_name"))
+			)
+	    )
+      )
+    ))
+  	 
+
 (defun cosma--oa-work (work)
   "The WORK Markdown file.
 
-Broken up in sections, each set up with (s-format TEMPLATE REPLACER EXTRA-ALIST).
+Broken up in sections, each set up with (s-format TEMPLATE
+REPLACER EXTRA-ALIST).
+
+Side-effects: update `cosma-oalex-ciations'.
 "
   (let* ((work-data (request-response-data
 		     (request (format work-api-url (cosma--shortid (cddr work)))
@@ -165,6 +211,7 @@ Broken up in sections, each set up with (s-format TEMPLATE REPLACER EXTRA-ALIST)
 		       :params `(("mailto" . ,user-mail-address)
 				 ("api_key" . ,oa-api-key)
 				 ))))
+	 (citations-set (cosma--update-citations (oa-get work-data "cited_by_api_url")))
 	 (extras `(("title" .			,(oa--title work-data))
 		   ("oa-id" .			,(oa-get work-data "id"))
 		   ("abbr-id" .			,(cosma--shortid (oa-get work-data "id")))
@@ -179,7 +226,7 @@ Broken up in sections, each set up with (s-format TEMPLATE REPLACER EXTRA-ALIST)
 		   ("citations_js" .		,(cosma--citations-js work-data))
 		   ("citations_score_js" .	,(cosma--citations-score-js work-data))
 		   ("citations_height" .	,(* 6 (length (cosma--citations-js work-data))))
-		   
+		   ("citations_works" .         ,(cosma--citations-text (oa-get work-data "cited_by_api_url") citations-set))
 		   ))
 	 )
     (insert (s-format "
@@ -199,6 +246,10 @@ ${authorships}
 ## Citations (${cited_by_count})
 <div id=\"chart_citations_${abbr-id}\" style=\"width:445px;height: 250px;\"></div>
 <script> const citationsdata_${abbr-id} = [{ y: [${citations_js}],x: [${citations_score_js}],type: 'bar',orientation: 'h',marker:{ color: 'rgba(227, 179, 130, 0.75)',line: { color: 'rgb(227, 179, 130)',width: 1 } } }]; const citationslayout_${abbr-id} = { showlegend: false,yaxis: { ticklabelposition: 'inside'} }; citationsTESTER = document.getElementById( 'chart_citations_${abbr-id}' ); Plotly.newPlot( citationsTESTER, citationsdata_${abbr-id}, citationslayout_${abbr-id} ); </script>
+
+### Cited by
+
+${citations_works}
 " 		      "## Citations (0)
 
 "
@@ -223,6 +274,8 @@ ${primary_topic}
 			(or (cdr (assoc key data)) ""))
 		      extras)
 	    )
+    ;; (debug "oa-work: " citations-set)
+    citations-set
     )
   )
 
@@ -239,7 +292,7 @@ Return an association list with key WORK-TITLE and value (COSMA-UUID . WORK-OAID
 	 purl)
     ;; if there is a remainder we need to get the rest
     (when (> (mod count per-page) 0) (cl-incf pages))
-    (message "Generating: Count: %s, Pages: %s, Per-Page: %s\n" count pages per-page)
+    (message "Generating: Count: %s, Pages: %s, Per-Page: %s (Be patient!)\n" count pages per-page)
     
     ;; Now we have to loop through the pages
     (cl-loop for i from 1 to pages
@@ -275,7 +328,7 @@ Return an association list with key WORK-TITLE and value (COSMA-UUID . WORK-OAID
   "Create and fill a Markdown buffer for a cosma table of content from Open
 Alex, and return the TOC as an alist (WORK-TITLE . COSMA-UUID)."
   ;; Build TOC as an alist
-    ;; Init TOC buffer
+  ;; Init TOC buffer
   (with-current-buffer (get-buffer-create "*COSMA-TOC*")
     (let* ((toc nil)
 	   (fn "AUTHOR")
@@ -296,7 +349,7 @@ Alex, and return the TOC as an alist (WORK-TITLE . COSMA-UUID)."
       (set-buffer-file-coding-system 'utf-8)
       ;; Header
       (insert (format cosma-yaml-template--author
-		      (format "%S" (plist-get data :display_name))
+		      (format "%s" (plist-get data :display_name))
 		      (cosma--newid)
 		      fn
 		      oaid
@@ -420,6 +473,7 @@ with annotated lists of pointers (when present in org buffer).
 	 (work-api-url "https://api.openalex.org/works/%s")
 	 (toc (cosma--oa-author-toc oaid))
 	 )
+    (setq cosma-oalex-citations nil)
     (dolist (work toc)
       ;; WORK is a list (TITLE UUID . OAID)
       (let ((fn "WORK"))
@@ -428,7 +482,7 @@ with annotated lists of pointers (when present in org buffer).
 	  (set-buffer-file-coding-system 'utf-8)
 	  ;; Add header
 	  (insert (format cosma-yaml-template--work
-			  (format "%S" (car work))
+			  (format "%s" (car work))
 			  (cadr work)
 			  fn
 			  (cddr work)
@@ -438,6 +492,29 @@ with annotated lists of pointers (when present in org buffer).
 	  ;; Save individual WORK Markdown file
 	  (append-to-file (point-min) (point-max)
 			  (format "%s\\%s_%s.md" dir fn (cadr work)))
+	  )
+	)
+      )
+    (message "-> %s %d %S\n"  "Final: " (length cosma-oalex-citations) cosma-oalex-citations)
+    (dolist (keyval cosma-oalex-citations)
+      (let ((fn "WORK")
+	    
+	    )
+	(with-current-buffer (get-buffer-create "*COSMA*")
+	  (erase-buffer)
+	  (set-buffer-file-coding-system 'utf-8)
+	  ;; Add header
+	  (insert (format cosma-yaml-template--work
+			  (cddr keyval)
+			  (cadr keyval)
+			  fn
+			  "cited by"
+			  ""))
+	  ;; Content
+	  (insert "#Content\n\n")
+	  ;; Save individual WORK Markdown file
+	  (append-to-file (point-min) (point-max)
+			  (format "%s\\%s_%s.md" dir fn (cadr keyval)))
 	  )
 	)
       )

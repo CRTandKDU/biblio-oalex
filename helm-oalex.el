@@ -24,7 +24,7 @@
 
 ;;; Code:
 (require 'helm-openalex)
-;(require 'cosma)
+(require 'cosma)
 
 ;; Crude unplugging of 'ivy".
 (defun ivy-more-chars () nil)
